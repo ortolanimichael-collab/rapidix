@@ -1,10 +1,13 @@
 import os
 import re
+import uuid
 import unicodedata
 from decimal import Decimal
 
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash
-from models import db, Negocio, Producto, Pedido, ItemPedido
+from flask import Flask, render_template, request, redirect, url_for, session, flash
+from werkzeug.utils import secure_filename
+
+from models import db, Negocio, Categoria, Subcategoria, Producto, Pedido, ItemPedido
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-secret-cambiar-en-produccion")
@@ -12,8 +15,12 @@ app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get(
     "DATABASE_URL", "sqlite:///rapidix.db"
 ).replace("postgres://", "postgresql://", 1)  # Render entrega postgres:// viejo, SQLAlchemy 2 pide postgresql://
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+app.config["MAX_CONTENT_LENGTH"] = 8 * 1024 * 1024  # 8MB por archivo subido
 
 db.init_app(app)
+
+EXTENSIONES_PERMITIDAS = {"png", "jpg", "jpeg", "webp"}
+CARPETA_UPLOADS = os.path.join(app.root_path, "static", "uploads")
 
 
 def slugify(texto):
@@ -25,9 +32,36 @@ def slugify(texto):
     return texto
 
 
+def guardar_imagen(archivo, negocio_id, subcarpeta):
+    """
+    Guarda una imagen subida en static/uploads/<negocio_id>/<subcarpeta>/<nombre-unico>.ext
+    y devuelve la ruta relativa a servir (o None si no vino archivo válido).
+    Cada negocio tiene su propia carpeta: sus fotos quedan aisladas de las de otros negocios.
+    """
+    if not archivo or archivo.filename == "":
+        return None
+
+    extension = archivo.filename.rsplit(".", 1)[-1].lower() if "." in archivo.filename else ""
+    if extension not in EXTENSIONES_PERMITIDAS:
+        return None
+
+    nombre_unico = f"{uuid.uuid4().hex}.{extension}"
+    carpeta_destino = os.path.join(CARPETA_UPLOADS, str(negocio_id), subcarpeta)
+    os.makedirs(carpeta_destino, exist_ok=True)
+
+    ruta_absoluta = os.path.join(carpeta_destino, secure_filename(nombre_unico))
+    archivo.save(ruta_absoluta)
+
+    return f"uploads/{negocio_id}/{subcarpeta}/{nombre_unico}"
+
+
+def negocio_actual():
+    negocio_id = session.get("negocio_id")
+    return Negocio.query.get(negocio_id) if negocio_id else None
+
+
 # ---------------------------------------------------------------------------
-# Landing / home de Rapidix (no es marketplace: solo explica el producto y
-# lleva a registrar un negocio o a iniciar sesión)
+# Landing / home de Rapidix
 # ---------------------------------------------------------------------------
 @app.route("/")
 def home():
@@ -35,7 +69,7 @@ def home():
 
 
 # ---------------------------------------------------------------------------
-# Registro de negocio
+# Registro e inicio de sesión de negocio
 # ---------------------------------------------------------------------------
 @app.route("/registro-negocio", methods=["GET", "POST"])
 def registro_negocio():
@@ -68,20 +102,75 @@ def registro_negocio():
     return render_template("registro_negocio.html")
 
 
+@app.route("/iniciar-sesion", methods=["GET", "POST"])
+def iniciar_sesion():
+    if request.method == "POST":
+        email = request.form["email"].strip().lower()
+        password = request.form["password"]
+
+        negocio = Negocio.query.filter_by(email=email).first()
+        if not negocio or not negocio.check_password(password):
+            flash("Email o contraseña incorrectos.", "error")
+            return redirect(url_for("iniciar_sesion"))
+
+        session["negocio_id"] = negocio.id
+        return redirect(url_for("panel_dueno"))
+
+    return render_template("iniciar_sesion.html")
+
+
+@app.route("/cerrar-sesion")
+def cerrar_sesion():
+    session.pop("negocio_id", None)
+    return redirect(url_for("home"))
+
+
 # ---------------------------------------------------------------------------
 # Tienda pública de un negocio: rapidix.com/<slug>
-# Solo muestra productos de ESE negocio, sin ruido de otros.
+# Home de la tienda = grid de categorías (como la home de Pedix)
 # ---------------------------------------------------------------------------
 @app.route("/<slug>")
 def tienda_negocio(slug):
     negocio = Negocio.query.filter_by(slug=slug, activo=True).first_or_404()
-    productos = Producto.query.filter_by(negocio_id=negocio.id, disponible=True).all()
-    return render_template("tienda.html", negocio=negocio, productos=productos)
+    categorias = Categoria.query.filter_by(negocio_id=negocio.id).order_by(Categoria.orden).all()
+    return render_template("tienda.html", negocio=negocio, categorias=categorias)
+
+
+@app.route("/<slug>/categoria/<int:categoria_id>")
+def tienda_categoria(slug, categoria_id):
+    negocio = Negocio.query.filter_by(slug=slug, activo=True).first_or_404()
+    categoria = Categoria.query.filter_by(id=categoria_id, negocio_id=negocio.id).first_or_404()
+    subcategorias = Subcategoria.query.filter_by(categoria_id=categoria.id).order_by(Subcategoria.orden).all()
+
+    if subcategorias:
+        # Con pestañas: productos agrupados por subcategoría
+        grupos = []
+        for sub in subcategorias:
+            productos = Producto.query.filter_by(
+                subcategoria_id=sub.id, disponible=True
+            ).all()
+            grupos.append({"subcategoria": sub, "productos": productos})
+        # Productos de la categoría sin subcategoría asignada (por si el negocio mezcla)
+        sueltos = Producto.query.filter_by(
+            categoria_id=categoria.id, subcategoria_id=None, disponible=True
+        ).all()
+        if sueltos:
+            grupos.append({"subcategoria": None, "productos": sueltos})
+        return render_template(
+            "tienda_categoria.html", negocio=negocio, categoria=categoria,
+            subcategorias=subcategorias, grupos=grupos
+        )
+
+    # Sin subcategorías: lista plana, directo (como "Cafetería" en el ejemplo)
+    productos = Producto.query.filter_by(categoria_id=categoria.id, disponible=True).all()
+    return render_template(
+        "tienda_categoria.html", negocio=negocio, categoria=categoria,
+        subcategorias=[], grupos=[{"subcategoria": None, "productos": productos}]
+    )
 
 
 # ---------------------------------------------------------------------------
-# Carrito (guardado en sesión, por negocio, para no mezclar carritos de
-# distintas tiendas si el cliente navega varias)
+# Carrito (guardado en sesión, por negocio)
 # ---------------------------------------------------------------------------
 def _carrito_key(negocio_id):
     return f"carrito_{negocio_id}"
@@ -100,7 +189,7 @@ def carrito_agregar(slug):
     carrito[str(producto_id)] = carrito.get(str(producto_id), 0) + cantidad
     session[key] = carrito
 
-    return redirect(url_for("tienda_negocio", slug=slug))
+    return redirect(request.referrer or url_for("tienda_negocio", slug=slug))
 
 
 @app.route("/<slug>/carrito")
@@ -164,33 +253,86 @@ def checkout(slug):
 
 
 # ---------------------------------------------------------------------------
-# Panel del dueño del negocio (carga de productos, ver pedidos)
+# Panel del dueño del negocio
 # ---------------------------------------------------------------------------
 @app.route("/panel")
 def panel_dueno():
-    negocio_id = session.get("negocio_id")
-    if not negocio_id:
-        return redirect(url_for("registro_negocio"))
+    negocio = negocio_actual()
+    if not negocio:
+        return redirect(url_for("iniciar_sesion"))
 
-    negocio = Negocio.query.get_or_404(negocio_id)
-    productos = Producto.query.filter_by(negocio_id=negocio.id).all()
+    categorias = Categoria.query.filter_by(negocio_id=negocio.id).order_by(Categoria.orden).all()
     pedidos = Pedido.query.filter_by(negocio_id=negocio.id).order_by(Pedido.creado_en.desc()).all()
 
-    return render_template("panel_dueno.html", negocio=negocio, productos=productos, pedidos=pedidos)
+    return render_template("panel_dueno.html", negocio=negocio, categorias=categorias, pedidos=pedidos)
+
+
+@app.route("/panel/categorias/nueva", methods=["POST"])
+def categoria_nueva():
+    negocio = negocio_actual()
+    if not negocio:
+        return redirect(url_for("iniciar_sesion"))
+
+    foto = guardar_imagen(request.files.get("foto"), negocio.id, "categorias")
+
+    categoria = Categoria(
+        negocio_id=negocio.id,
+        nombre=request.form["nombre"].strip(),
+        foto=foto,
+    )
+    db.session.add(categoria)
+    db.session.commit()
+
+    return redirect(url_for("panel_dueno"))
+
+
+@app.route("/panel/subcategorias/nueva", methods=["POST"])
+def subcategoria_nueva():
+    negocio = negocio_actual()
+    if not negocio:
+        return redirect(url_for("iniciar_sesion"))
+
+    categoria_id = int(request.form["categoria_id"])
+    categoria = Categoria.query.filter_by(id=categoria_id, negocio_id=negocio.id).first_or_404()
+
+    subcategoria = Subcategoria(
+        categoria_id=categoria.id,
+        nombre=request.form["nombre"].strip(),
+    )
+    db.session.add(subcategoria)
+    db.session.commit()
+
+    return redirect(url_for("panel_dueno"))
 
 
 @app.route("/panel/productos/nuevo", methods=["POST"])
 def producto_nuevo():
-    negocio_id = session.get("negocio_id")
-    if not negocio_id:
-        return redirect(url_for("registro_negocio"))
+    negocio = negocio_actual()
+    if not negocio:
+        return redirect(url_for("iniciar_sesion"))
+
+    categoria_id = int(request.form["categoria_id"])
+    categoria = Categoria.query.filter_by(id=categoria_id, negocio_id=negocio.id).first_or_404()
+
+    subcategoria_id = request.form.get("subcategoria_id") or None
+    if subcategoria_id:
+        subcategoria_id = int(subcategoria_id)
+        Subcategoria.query.filter_by(id=subcategoria_id, categoria_id=categoria.id).first_or_404()
+
+    precio_original_raw = request.form.get("precio_original", "").strip()
+    precio_original = Decimal(precio_original_raw) if precio_original_raw else None
+
+    foto = guardar_imagen(request.files.get("foto"), negocio.id, "productos")
 
     producto = Producto(
-        negocio_id=negocio_id,
+        negocio_id=negocio.id,
+        categoria_id=categoria.id,
+        subcategoria_id=subcategoria_id,
         nombre=request.form["nombre"].strip(),
         descripcion=request.form.get("descripcion", "").strip(),
         precio=Decimal(request.form["precio"]),
-        categoria=request.form.get("categoria", "").strip(),
+        precio_original=precio_original,
+        foto=foto,
     )
     db.session.add(producto)
     db.session.commit()
