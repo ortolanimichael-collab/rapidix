@@ -19,6 +19,9 @@ app.config["MAX_CONTENT_LENGTH"] = 8 * 1024 * 1024  # 8MB por archivo subido
 
 db.init_app(app)
 
+with app.app_context():
+    db.create_all()
+
 EXTENSIONES_PERMITIDAS = {"png", "jpg", "jpeg", "webp"}
 CARPETA_UPLOADS = os.path.join(app.root_path, "static", "uploads")
 
@@ -341,6 +344,4 @@ def producto_nuevo():
 
 
 if __name__ == "__main__":
-    with app.app_context():
-        db.create_all()
     app.run(debug=True, port=5000)
