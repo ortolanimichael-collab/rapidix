@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Carrito — {{ negocio.nombre }}{% endblock %}
+
+{% block content %}
+<div class="carrito-container">
+    <h1>Tu carrito — {{ negocio.nombre }}</h1>
+
+    {% if items %}
+        <table class="tabla-carrito">
+            <thead>
+                <tr><th>Producto</th><th>Cantidad</th><th>Subtotal</th></tr>
+            </thead>
+            <tbody>
+                {% for item in items %}
+                <tr>
+                    <td>{{ item.producto.nombre }}</td>
+                    <td>{{ item.cantidad }}</td>
+                    <td>${{ "%.2f"|format(item.subtotal) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <p class="total">Total: ${{ "%.2f"|format(total) }}</p>
+
+        <form method="POST" action="{{ url_for('checkout', slug=negocio.slug) }}" class="form-checkout">
+            <label>Tu nombre
+                <input type="text" name="cliente_nombre" required>
+            </label>
+            <label>Teléfono
+                <input type="tel" name="cliente_telefono">
+            </label>
+            <label>Dirección de entrega
+                <input type="text" name="cliente_direccion">
+            </label>
+            <label>Notas
+                <textarea name="notas"></textarea>
+            </label>
+            <button type="submit" class="btn btn-primary">Confirmar pedido</button>
+        </form>
+    {% else %}
+        <p class="vacio">Tu carrito está vacío.</p>
+        <a href="{{ url_for('tienda_negocio', slug=negocio.slug) }}" class="btn btn-secondary">Volver a la tienda</a>
+    {% endif %}
+</div>
+{% endblock %}

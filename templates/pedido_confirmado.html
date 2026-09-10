@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Pedido confirmado — {{ negocio.nombre }}{% endblock %}
+
+{% block content %}
+<div class="confirmacion-container">
+    <h1>¡Pedido enviado!</h1>
+    <p>Tu pedido #{{ pedido.id }} en <strong>{{ negocio.nombre }}</strong> fue recibido.</p>
+    <p class="total">Total: ${{ "%.2f"|format(pedido.total) }}</p>
+    {% if negocio.whatsapp %}
+        <a href="https://wa.me/{{ negocio.whatsapp }}?text=Hola!%20Quiero%20confirmar%20mi%20pedido%20%23{{ pedido.id }}%20en%20Rapidix"
+           class="btn btn-primary" target="_blank">Confirmar por WhatsApp</a>
+    {% endif %}
+    <a href="{{ url_for('tienda_negocio', slug=negocio.slug) }}" class="btn btn-secondary">Volver a la tienda</a>
+</div>
+{% endblock %}

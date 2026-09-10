@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Rapidix — Tu tienda online, lista en minutos{% endblock %}
+
+{% block content %}
+<header class="hero">
+    <h1>Rapidix</h1>
+    <p>Cada negocio, su propia tienda online. Con carrito de compras y facturación integrada.</p>
+    <div class="hero-actions">
+        <a href="{{ url_for('registro_negocio') }}" class="btn btn-primary">Registrar mi negocio</a>
+    </div>
+</header>
+
+<section class="features">
+    <div class="feature">
+        <h3>Tu tienda, tu URL</h3>
+        <p>Cada negocio tiene su propia página, sin mezclarse con otros negocios.</p>
+    </div>
+    <div class="feature">
+        <h3>Carrito de compras</h3>
+        <p>Tus clientes arman su pedido y lo envían directo a vos.</p>
+    </div>
+    <div class="feature">
+        <h3>Facturación integrada</h3>
+        <p>Conectá tu tienda al ecosistema de Facturea y facturá tus ventas sin esfuerzo extra.</p>
+    </div>
+</section>
+{% endblock %}

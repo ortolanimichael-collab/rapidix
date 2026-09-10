@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Registrá tu negocio — Rapidix{% endblock %}
+
+{% block content %}
+<div class="form-container">
+    <h1>Registrá tu negocio</h1>
+    <form method="POST">
+        <label>Nombre del negocio
+            <input type="text" name="nombre" required>
+        </label>
+        <label>Email
+            <input type="email" name="email" required>
+        </label>
+        <label>Contraseña
+            <input type="password" name="password" required minlength="6">
+        </label>
+        <button type="submit" class="btn btn-primary">Crear mi tienda</button>
+    </form>
+</div>
+{% endblock %}

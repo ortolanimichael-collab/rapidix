@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}{{ negocio.nombre }} — Rapidix{% endblock %}
+
+{% block content %}
+<header class="tienda-header" {% if negocio.foto_portada %}style="background-image: url('{{ negocio.foto_portada }}')"{% endif %}>
+    <div class="tienda-perfil">
+        {% if negocio.foto_perfil %}
+            <img src="{{ negocio.foto_perfil }}" alt="{{ negocio.nombre }}" class="tienda-avatar">
+        {% endif %}
+        <h1>{{ negocio.nombre }}</h1>
+        {% if negocio.descripcion %}<p>{{ negocio.descripcion }}</p>{% endif %}
+    </div>
+    <a href="{{ url_for('ver_carrito', slug=negocio.slug) }}" class="btn btn-carrito">Ver carrito</a>
+</header>
+
+<main class="catalogo">
+    {% if productos %}
+        <div class="grid-productos">
+            {% for producto in productos %}
+                <div class="card-producto">
+                    {% if producto.foto %}
+                        <img src="{{ producto.foto }}" alt="{{ producto.nombre }}">
+                    {% endif %}
+                    <h3>{{ producto.nombre }}</h3>
+                    {% if producto.descripcion %}<p class="descripcion">{{ producto.descripcion }}</p>{% endif %}
+                    <p class="precio">${{ "%.2f"|format(producto.precio) }}</p>
+                    <form method="POST" action="{{ url_for('carrito_agregar', slug=negocio.slug) }}">
+                        <input type="hidden" name="producto_id" value="{{ producto.id }}">
+                        <input type="number" name="cantidad" value="1" min="1" class="input-cantidad">
+                        <button type="submit" class="btn btn-secondary">Agregar</button>
+                    </form>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <p class="vacio">Este negocio todavía no cargó productos.</p>
+    {% endif %}
+</main>
+{% endblock %}

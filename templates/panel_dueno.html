@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Panel — {{ negocio.nombre }}{% endblock %}
+
+{% block content %}
+<div class="panel-container">
+    <h1>Panel de {{ negocio.nombre }}</h1>
+    <p>Tu tienda: <a href="{{ url_for('tienda_negocio', slug=negocio.slug) }}" target="_blank">rapidix.com/{{ negocio.slug }}</a></p>
+
+    <section>
+        <h2>Cargar producto</h2>
+        <form method="POST" action="{{ url_for('producto_nuevo') }}" class="form-producto">
+            <label>Nombre
+                <input type="text" name="nombre" required>
+            </label>
+            <label>Descripción
+                <textarea name="descripcion"></textarea>
+            </label>
+            <label>Precio
+                <input type="number" name="precio" step="0.01" min="0" required>
+            </label>
+            <label>Categoría
+                <input type="text" name="categoria">
+            </label>
+            <button type="submit" class="btn btn-primary">Guardar producto</button>
+        </form>
+    </section>
+
+    <section>
+        <h2>Mis productos</h2>
+        {% if productos %}
+            <ul class="lista-productos">
+                {% for producto in productos %}
+                    <li>{{ producto.nombre }} — ${{ "%.2f"|format(producto.precio) }}
+                        {% if not producto.disponible %}<span class="badge">No disponible</span>{% endif %}
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p class="vacio">Todavía no cargaste productos.</p>
+        {% endif %}
+    </section>
+
+    <section>
+        <h2>Pedidos recibidos</h2>
+        {% if pedidos %}
+            <ul class="lista-pedidos">
+                {% for pedido in pedidos %}
+                    <li>
+                        #{{ pedido.id }} — {{ pedido.cliente_nombre }} — ${{ "%.2f"|format(pedido.total) }}
+                        — <span class="estado estado-{{ pedido.estado }}">{{ pedido.estado }}</span>
+                        {% if pedido.facturado %}<span class="badge badge-ok">Facturado</span>{% endif %}
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p class="vacio">Todavía no recibiste pedidos.</p>
+        {% endif %}
+    </section>
+</div>
+{% endblock %}
