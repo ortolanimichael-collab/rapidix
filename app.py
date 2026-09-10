@@ -15,12 +15,24 @@ app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get(
     "DATABASE_URL", "sqlite:///rapidix.db"
 ).replace("postgres://", "postgresql://", 1)  # Render entrega postgres:// viejo, SQLAlchemy 2 pide postgresql://
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-app.config["MAX_CONTENT_LENGTH"] = 8 * 1024 * 1024  # 8MB por archivo subido
+app.config["MAX_CONTENT_LENGTH"] = 15 * 1024 * 1024  # 15MB por archivo subido
 
 db.init_app(app)
 
 with app.app_context():
     db.create_all()
+
+
+@app.errorhandler(413)
+def archivo_demasiado_grande(error):
+    flash("La imagen es demasiado pesada (máximo 15MB). Probá con una más liviana.", "error")
+    return redirect(request.referrer or url_for("panel_dueno"))
+
+
+@app.errorhandler(400)
+def solicitud_invalida(error):
+    flash("Faltó completar algún dato obligatorio. Revisá el formulario e intentá de nuevo.", "error")
+    return redirect(request.referrer or url_for("panel_dueno"))
 
 EXTENSIONES_PERMITIDAS = {"png", "jpg", "jpeg", "webp"}
 CARPETA_UPLOADS = os.path.join(app.root_path, "static", "uploads")
@@ -276,13 +288,14 @@ def categoria_nueva():
     if not negocio:
         return redirect(url_for("iniciar_sesion"))
 
+    nombre = request.form.get("nombre", "").strip()
+    if not nombre:
+        flash("El nombre de la categoría es obligatorio.", "error")
+        return redirect(url_for("panel_dueno"))
+
     foto = guardar_imagen(request.files.get("foto"), negocio.id, "categorias")
 
-    categoria = Categoria(
-        negocio_id=negocio.id,
-        nombre=request.form["nombre"].strip(),
-        foto=foto,
-    )
+    categoria = Categoria(negocio_id=negocio.id, nombre=nombre, foto=foto)
     db.session.add(categoria)
     db.session.commit()
 
@@ -295,17 +308,30 @@ def subcategoria_nueva():
     if not negocio:
         return redirect(url_for("iniciar_sesion"))
 
-    categoria_id = int(request.form["categoria_id"])
-    categoria = Categoria.query.filter_by(id=categoria_id, negocio_id=negocio.id).first_or_404()
+    nombre = request.form.get("nombre", "").strip()
+    categoria_id_raw = request.form.get("categoria_id")
+    if not nombre or not categoria_id_raw:
+        flash("Faltó el nombre de la subcategoría.", "error")
+        return redirect(url_for("panel_dueno"))
 
-    subcategoria = Subcategoria(
-        categoria_id=categoria.id,
-        nombre=request.form["nombre"].strip(),
-    )
+    categoria = Categoria.query.filter_by(id=int(categoria_id_raw), negocio_id=negocio.id).first_or_404()
+
+    subcategoria = Subcategoria(categoria_id=categoria.id, nombre=nombre)
     db.session.add(subcategoria)
     db.session.commit()
 
     return redirect(url_for("panel_dueno"))
+
+
+def parsear_precio(texto):
+    """Acepta tanto '1234.50' como '1234,50' (formato argentino)."""
+    texto = (texto or "").strip().replace(",", ".")
+    if not texto:
+        return None
+    try:
+        return Decimal(texto)
+    except Exception:
+        return None
 
 
 @app.route("/panel/productos/nuevo", methods=["POST"])
@@ -314,16 +340,22 @@ def producto_nuevo():
     if not negocio:
         return redirect(url_for("iniciar_sesion"))
 
-    categoria_id = int(request.form["categoria_id"])
-    categoria = Categoria.query.filter_by(id=categoria_id, negocio_id=negocio.id).first_or_404()
+    nombre = request.form.get("nombre", "").strip()
+    categoria_id_raw = request.form.get("categoria_id")
+    precio = parsear_precio(request.form.get("precio"))
+
+    if not nombre or not categoria_id_raw or precio is None:
+        flash("Completá al menos nombre, categoría y precio del producto.", "error")
+        return redirect(url_for("panel_dueno"))
+
+    categoria = Categoria.query.filter_by(id=int(categoria_id_raw), negocio_id=negocio.id).first_or_404()
 
     subcategoria_id = request.form.get("subcategoria_id") or None
     if subcategoria_id:
         subcategoria_id = int(subcategoria_id)
         Subcategoria.query.filter_by(id=subcategoria_id, categoria_id=categoria.id).first_or_404()
 
-    precio_original_raw = request.form.get("precio_original", "").strip()
-    precio_original = Decimal(precio_original_raw) if precio_original_raw else None
+    precio_original = parsear_precio(request.form.get("precio_original"))
 
     foto = guardar_imagen(request.files.get("foto"), negocio.id, "productos")
 
@@ -331,9 +363,9 @@ def producto_nuevo():
         negocio_id=negocio.id,
         categoria_id=categoria.id,
         subcategoria_id=subcategoria_id,
-        nombre=request.form["nombre"].strip(),
+        nombre=nombre,
         descripcion=request.form.get("descripcion", "").strip(),
-        precio=Decimal(request.form["precio"]),
+        precio=precio,
         precio_original=precio_original,
         foto=foto,
     )
