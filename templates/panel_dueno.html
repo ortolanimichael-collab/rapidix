@@ -2,59 +2,157 @@
 {% block title %}Panel — {{ negocio.nombre }}{% endblock %}
 
 {% block content %}
-<div class="panel-container">
-    <h1>Panel de {{ negocio.nombre }}</h1>
-    <p>Tu tienda: <a href="{{ url_for('tienda_negocio', slug=negocio.slug) }}" target="_blank">rapidix.com/{{ negocio.slug }}</a></p>
+<div class="panel-layout">
 
-    <section>
-        <h2>Cargar producto</h2>
-        <form method="POST" action="{{ url_for('producto_nuevo') }}" class="form-producto">
-            <label>Nombre
-                <input type="text" name="nombre" required>
-            </label>
-            <label>Descripción
-                <textarea name="descripcion"></textarea>
-            </label>
-            <label>Precio
-                <input type="number" name="precio" step="0.01" min="0" required>
-            </label>
-            <label>Categoría
-                <input type="text" name="categoria">
-            </label>
-            <button type="submit" class="btn btn-primary">Guardar producto</button>
-        </form>
-    </section>
+    <aside class="panel-preview">
+        <div class="preview-sticky">
+            <p class="preview-titulo">Vista previa en vivo</p>
+            <div class="telefono-mockup">
+                <div class="telefono-notch"></div>
+                <div class="telefono-pantalla">
+                    <iframe id="vista-previa-iframe"
+                            src="{{ url_for('tienda_negocio', slug=negocio.slug) }}"
+                            title="Vista previa de la tienda"></iframe>
+                </div>
+            </div>
+            <button type="button" class="btn btn-secondary btn-preview-home" onclick="mostrarPreview('{{ url_for('tienda_negocio', slug=negocio.slug) }}')">
+                ⟲ Volver a la home de la tienda
+            </button>
+        </div>
+    </aside>
 
-    <section>
-        <h2>Mis productos</h2>
-        {% if productos %}
-            <ul class="lista-productos">
-                {% for producto in productos %}
-                    <li>{{ producto.nombre }} — ${{ "%.2f"|format(producto.precio) }}
-                        {% if not producto.disponible %}<span class="badge">No disponible</span>{% endif %}
-                    </li>
+    <div class="panel-container panel-main">
+        <div class="panel-header">
+            <h1>Panel de {{ negocio.nombre }}</h1>
+            <a href="{{ url_for('cerrar_sesion') }}" class="link-salir">Cerrar sesión</a>
+        </div>
+        <p>Tu tienda: <a href="{{ url_for('tienda_negocio', slug=negocio.slug) }}" target="_blank">rapidix.com/{{ negocio.slug }}</a></p>
+
+        <section>
+            <h2>Nueva categoría</h2>
+            <p class="ayuda">Ej: "Pizzería", "Heladería / Postres". Se muestra como tarjeta en la home de tu tienda.</p>
+            <form method="POST" action="{{ url_for('categoria_nueva') }}" enctype="multipart/form-data" class="form-inline">
+                <label>Nombre
+                    <input type="text" name="nombre" required>
+                </label>
+                <label>Foto
+                    <input type="file" name="foto" accept="image/png,image/jpeg,image/webp">
+                </label>
+                <button type="submit" class="btn btn-primary">Crear categoría</button>
+            </form>
+        </section>
+
+        <section>
+            <h2>Mis categorías y productos</h2>
+            {% if categorias %}
+                {% for categoria in categorias %}
+                    <div class="bloque-categoria">
+                        <div class="bloque-categoria-header">
+                            <h3>{{ categoria.nombre }}</h3>
+                            <button type="button" class="link-preview" onclick="mostrarPreview('{{ url_for('tienda_categoria', slug=negocio.slug, categoria_id=categoria.id) }}')">
+                                👁 Ver en la vista previa
+                            </button>
+                        </div>
+
+                        {% if categoria.subcategorias %}
+                            <ul class="lista-subcategorias">
+                                {% for sub in categoria.subcategorias %}
+                                    <li>{{ sub.nombre }}</li>
+                                {% endfor %}
+                            </ul>
+                        {% endif %}
+
+                        <details>
+                            <summary>+ Agregar subcategoría (opcional)</summary>
+                            <form method="POST" action="{{ url_for('subcategoria_nueva') }}" class="form-inline">
+                                <input type="hidden" name="categoria_id" value="{{ categoria.id }}">
+                                <label>Nombre
+                                    <input type="text" name="nombre" required>
+                                </label>
+                                <button type="submit" class="btn btn-secondary">Agregar</button>
+                            </form>
+                        </details>
+
+                        <details>
+                            <summary>+ Cargar producto en "{{ categoria.nombre }}"</summary>
+                            <form method="POST" action="{{ url_for('producto_nuevo') }}" enctype="multipart/form-data" class="form-producto">
+                                <input type="hidden" name="categoria_id" value="{{ categoria.id }}">
+
+                                {% if categoria.subcategorias %}
+                                    <label>Subcategoría (opcional)
+                                        <select name="subcategoria_id">
+                                            <option value="">Sin subcategoría</option>
+                                            {% for sub in categoria.subcategorias %}
+                                                <option value="{{ sub.id }}">{{ sub.nombre }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </label>
+                                {% endif %}
+
+                                <label>Nombre
+                                    <input type="text" name="nombre" required>
+                                </label>
+                                <label>Descripción
+                                    <textarea name="descripcion"></textarea>
+                                </label>
+                                <label>Precio
+                                    <input type="text" inputmode="decimal" name="precio" placeholder="Ej: 1500 o 1500,50" required>
+                                </label>
+                                <label>Precio anterior (opcional, para mostrar descuento)
+                                    <input type="text" inputmode="decimal" name="precio_original" placeholder="Ej: 1800">
+                                </label>
+                                <label>Foto
+                                    <input type="file" name="foto" accept="image/png,image/jpeg,image/webp">
+                                </label>
+                                <button type="submit" class="btn btn-primary">Guardar producto</button>
+                            </form>
+                        </details>
+
+                        {% if categoria.productos %}
+                            <ul class="lista-productos">
+                                {% for producto in categoria.productos %}
+                                    <li>
+                                        {{ producto.nombre }} — ${{ "%.2f"|format(producto.precio) }}
+                                        {% if producto.descuento_porcentaje() %}
+                                            <span class="badge badge-ok">{{ producto.descuento_porcentaje() }}% OFF</span>
+                                        {% endif %}
+                                        {% if not producto.disponible %}<span class="badge">No disponible</span>{% endif %}
+                                    </li>
+                                {% endfor %}
+                            </ul>
+                        {% else %}
+                            <p class="vacio">Todavía no cargaste productos en esta categoría.</p>
+                        {% endif %}
+                    </div>
                 {% endfor %}
-            </ul>
-        {% else %}
-            <p class="vacio">Todavía no cargaste productos.</p>
-        {% endif %}
-    </section>
+            {% else %}
+                <p class="vacio">Creá tu primera categoría para poder cargar productos.</p>
+            {% endif %}
+        </section>
 
-    <section>
-        <h2>Pedidos recibidos</h2>
-        {% if pedidos %}
-            <ul class="lista-pedidos">
-                {% for pedido in pedidos %}
-                    <li>
-                        #{{ pedido.id }} — {{ pedido.cliente_nombre }} — ${{ "%.2f"|format(pedido.total) }}
-                        — <span class="estado estado-{{ pedido.estado }}">{{ pedido.estado }}</span>
-                        {% if pedido.facturado %}<span class="badge badge-ok">Facturado</span>{% endif %}
-                    </li>
-                {% endfor %}
-            </ul>
-        {% else %}
-            <p class="vacio">Todavía no recibiste pedidos.</p>
-        {% endif %}
-    </section>
+        <section>
+            <h2>Pedidos recibidos</h2>
+            {% if pedidos %}
+                <ul class="lista-pedidos">
+                    {% for pedido in pedidos %}
+                        <li>
+                            #{{ pedido.id }} — {{ pedido.cliente_nombre }} — ${{ "%.2f"|format(pedido.total) }}
+                            — <span class="estado estado-{{ pedido.estado }}">{{ pedido.estado }}</span>
+                            {% if pedido.facturado %}<span class="badge badge-ok">Facturado</span>{% endif %}
+                        </li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p class="vacio">Todavía no recibiste pedidos.</p>
+            {% endif %}
+        </section>
+    </div>
 </div>
+
+<script>
+    function mostrarPreview(url) {
+        var iframe = document.getElementById('vista-previa-iframe');
+        if (iframe) { iframe.src = url; }
+    }
+</script>
 {% endblock %}

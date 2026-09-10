@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}{{ categoria.nombre }} — {{ negocio.nombre }}{% endblock %}
+
+{% block content %}
+<div class="tienda-mobile">
+    <header class="tienda-topbar">
+        <a href="{{ url_for('tienda_negocio', slug=negocio.slug) }}" class="volver">←</a>
+        <span class="tienda-nombre">{{ categoria.nombre }}</span>
+        <a href="{{ url_for('ver_carrito', slug=negocio.slug) }}" class="btn-carrito-icono">🛒</a>
+    </header>
+
+    {% if subcategorias %}
+        <div class="pestanas-subcategoria">
+            {% for sub in subcategorias %}
+                <a href="#sub-{{ sub.id }}" class="pestana">{{ sub.nombre }}</a>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    {% for grupo in grupos %}
+        <section class="grupo-productos" {% if grupo.subcategoria %}id="sub-{{ grupo.subcategoria.id }}"{% endif %}>
+            {% if grupo.subcategoria %}
+                <h3 class="titulo-grupo">{{ grupo.subcategoria.nombre }} <span class="contador">({{ grupo.productos|length }})</span></h3>
+            {% endif %}
+
+            {% if grupo.productos %}
+                {% for producto in grupo.productos %}
+                    <div class="fila-producto">
+                        {% if producto.foto %}
+                            <img src="{{ url_for('static', filename=producto.foto) }}" alt="{{ producto.nombre }}" class="foto-producto">
+                        {% endif %}
+                        <div class="info-producto">
+                            <span class="nombre-producto">{{ producto.nombre }}</span>
+                            {% if producto.descripcion %}<span class="descripcion-producto">{{ producto.descripcion }}</span>{% endif %}
+                            <div class="precios-producto">
+                                <span class="precio-actual">${{ "%.0f"|format(producto.precio) }}</span>
+                                {% if producto.precio_original and producto.precio_original > producto.precio %}
+                                    <span class="precio-tachado">${{ "%.0f"|format(producto.precio_original) }}</span>
+                                {% endif %}
+                            </div>
+                            {% set descuento = producto.descuento_porcentaje() %}
+                            {% if descuento %}
+                                <span class="badge-descuento-chico">HASTA {{ descuento }}% OFF</span>
+                            {% endif %}
+                        </div>
+                        <form method="POST" action="{{ url_for('carrito_agregar', slug=negocio.slug) }}" class="form-agregar-mini">
+                            <input type="hidden" name="producto_id" value="{{ producto.id }}">
+                            <input type="hidden" name="cantidad" value="1">
+                            <button type="submit" class="btn-agregar-mini">+</button>
+                        </form>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <p class="vacio">Sin productos cargados todavía.</p>
+            {% endif %}
+        </section>
+    {% endfor %}
+</div>
+{% endblock %}

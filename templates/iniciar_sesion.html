@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Iniciar sesión — Rapidix{% endblock %}
+
+{% block content %}
+<div class="form-container">
+    <h1>Iniciar sesión</h1>
+    <form method="POST">
+        <label>Email
+            <input type="email" name="email" required>
+        </label>
+        <label>Contraseña
+            <input type="password" name="password" required>
+        </label>
+        <button type="submit" class="btn btn-primary">Entrar</button>
+    </form>
+    <p><a href="{{ url_for('registro_negocio') }}">¿Todavía no tenés cuenta? Registrá tu negocio</a></p>
+</div>
+{% endblock %}
